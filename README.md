@@ -20,27 +20,78 @@ App de gestión de tareas (tipo Jira simplificado) con suite completa de tests.
 
 ---
 
+## Estado actual
+
+> **Frontend (`apps/web`) no está implementado aún.**
+> La API (backend) está completa y todos los tests corren contra ella.
+> El comando `npm run dev` levanta solo la API; el error de `apps/web` es esperado.
+
+---
+
+## Prerequisitos
+
+- Node.js 20+
+- PostgreSQL local (ver opciones abajo)
+- Docker (opcional)
+
+### Opción A — PostgreSQL del sistema (Homebrew)
+
+Si ya tenés PostgreSQL corriendo en tu máquina (puerto 5432):
+
+```bash
+createdb taskflow_dev
+```
+
+En `apps/api/.env`:
+```
+DATABASE_URL="postgresql://<tu-usuario-de-sistema>@localhost:5432/taskflow_dev"
+```
+
+### Opción B — Docker
+
+Si no tenés PostgreSQL instalado, levantá un contenedor.
+**Importante:** si ya hay un PostgreSQL del sistema corriendo en el puerto 5432, usá un puerto distinto (ej. 5433).
+
+```bash
+docker run --name taskflow-db -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:16
+```
+
+En `apps/api/.env`:
+```
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+```
+
+Para iniciar/detener el contenedor:
+```bash
+docker start taskflow-db
+docker stop taskflow-db
+```
+
+---
+
 ## Inicio rápido
 
 ```bash
-# 1. Instalar dependencias
+# 1. Instalar dependencias (desde la raíz)
 npm install
 
 # 2. Configurar variables de entorno
 cp apps/api/.env.example apps/api/.env
-# Editar DATABASE_URL con tu PostgreSQL local
+# Editar DATABASE_URL según la opción elegida arriba
+# Agregar JWT_SECRET=cualquier-string-secreto
 
-# 3. Aplicar migraciones y seed
+# 3. Aplicar migraciones
 cd apps/api
-npx prisma migrate dev
-npx prisma db seed
+npx prisma migrate deploy --schema=src/prisma/schema.prisma
 
-# 4. Levantar todo
+# 4. Levantar la API
 cd ../..
 npm run dev
-# API en http://localhost:3001
-# Web en http://localhost:5173
+# API disponible en http://localhost:3001
+# (el error de apps/web es esperado — frontend pendiente)
 ```
+
+> **Nota:** `npx prisma db seed` no está configurado aún. Podés ignorar ese paso.
 
 ---
 
