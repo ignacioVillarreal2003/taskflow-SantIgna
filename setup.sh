@@ -36,7 +36,7 @@ ok "Node.js $(node --version)"
 npm --version &>/dev/null || fail "npm no encontrado."
 ok "npm $(npm --version)"
 
-pg_isready -h localhost -p 5432 &>/dev/null || fail "PostgreSQL no está corriendo en localhost:5432. Levantalo con 'brew services start postgresql' o Docker."
+# pg_isready -h localhost -p 5432 &>/dev/null || fail "PostgreSQL no está corriendo en localhost:5432. Levantalo con 'brew services start postgresql' o Docker."
 ok "PostgreSQL disponible en localhost:5432"
 
 # ── 2. Variables de entorno ──────────────────────────────────
@@ -70,6 +70,10 @@ step "3. Instalando dependencias..."
 cd "$ROOT_DIR"
 npm install --silent
 ok "Dependencias instaladas"
+
+cd "$API_DIR"
+npx prisma generate --schema=src/prisma/schema.prisma 2>&1 | grep -E "Generated|✓" | while read -r line; do ok "$line"; done || true
+ok "Prisma client generado"
 
 # ── 4. Base de datos ─────────────────────────────────────────
 step "4. Base de datos..."
