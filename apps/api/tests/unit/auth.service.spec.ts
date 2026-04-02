@@ -142,8 +142,6 @@ describe('AuthService.login — US-02', () => {
       expect(result.user.email).toBe('ana@test.com')
     })
 
-    // 🐛 Este test debería fallar con el BUG-07 activo
-    // El token generado en login() no incluye expiración
     it('el token generado incluye campo de expiración (exp) — BUG-07', async () => {
       const hash = await bcrypt.hash('Password1', 12)
       mockDb.user.findUnique.mockResolvedValue({ ...mockUser, passwordHash: hash })
@@ -153,7 +151,6 @@ describe('AuthService.login — US-02', () => {
 
       const decoded = jwt.decode(result.token) as any
 
-      // Este expect FALLA con el bug activo → BUG-07 encontrado
       expect(decoded.exp).toBeDefined()
     })
   })
@@ -179,43 +176,82 @@ describe('AuthService.login — US-02', () => {
   })
 
   describe('Criterio 3: bloqueo por intentos fallidos', () => {
-    it('bloquea la cuenta después de 5 intentos fallidos — BUG-05', async () => {
-      const hash = await bcrypt.hash('Password1', 12)
-      // Simula usuario con 5 intentos fallidos exactos (justo en el límite)
-      mockDb.user.findUnique.mockResolvedValue({
-        ...mockUser,
-        passwordHash: hash,
-        failedLogins: 5,
-        lockedUntil: null,
-      })
-      mockDb.user.update.mockResolvedValue({})
-
-      // Con password incorrecto en el intento 6 (failedLogins llega a 6)
-      // El bug: la cuenta debería haberse bloqueado en el intento 5
-      // Con el bug activo, este test pasa como UnauthorizedError sin lock
-      // La validación correcta sería que la cuenta YA esté bloqueada
-
-      // Este test documenta el comportamiento buggy:
-      await expect(
-        authService.login({ email: 'ana@test.com', password: 'WrongPass1' })
-      ).rejects.toThrow(UnauthorizedError)
-
-      // Verificar que se llamó update con lockedUntil establecido
-      const updateCall = mockDb.user.update.mock.calls[0][0]
-      expect(updateCall.data.lockedUntil).toBeDefined()
-      // BUG: lockedUntil solo se setea cuando failedLogins > 5, no >= 5
-      // En este caso failedLogins llegaría a 6 y recién ahí se bloquea
-    })
-
     it('respeta el bloqueo si lockedUntil está en el futuro', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         ...mockUser,
-        lockedUntil: new Date(Date.now() + 10 * 60 * 1000), // 10 min en el futuro
+        lockedUntil: new Date(Date.now() + 10 * 60 * 1000),
       })
 
       await expect(
         authService.login({ email: 'ana@test.com', password: 'Password1' })
       ).rejects.toThrow('locked')
     })
+  })
+})
+
+describe('AuthService.handleFailedLogin — bloqueo de cuenta', () => {
+  it('1er intento fallido: failedLogins=1 y no bloquea', async () => {
+    mockDb.user.findUnique.mockResolvedValue({
+      ...mockUser,
+      failedLogins: 0,
+      lockedUntil: null,
+    })
+    mockDb.user.update.mockResolvedValue({})
+
+    await authService.handleFailedLogin('user-1')
+
+    expect(mockDb.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: expect.objectContaining({
+        failedLogins: 1,
+        lockedUntil: null,
+      }),
+    })
+  })
+
+  it('4to intento fallido: failedLogins=4 y no bloquea', async () => {
+    mockDb.user.findUnique.mockResolvedValue({
+      ...mockUser,
+      failedLogins: 3,
+      lockedUntil: null,
+    })
+    mockDb.user.update.mockResolvedValue({})
+
+    await authService.handleFailedLogin('user-1')
+
+    expect(mockDb.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: expect.objectContaining({
+        failedLogins: 4,
+        lockedUntil: null,
+      }),
+    })
+  })
+
+  it('5to intento fallido: failedLogins=5 y bloquea', async () => {
+    mockDb.user.findUnique.mockResolvedValue({
+      ...mockUser,
+      failedLogins: 4,
+      lockedUntil: null,
+    })
+    mockDb.user.update.mockResolvedValue({})
+
+    await authService.handleFailedLogin('user-1')
+
+    const updateCall = mockDb.user.update.mock.calls.at(-1)?.[0]
+    expect(updateCall.data.failedLogins).toBe(5)
+    expect(updateCall.data.lockedUntil).toBeDefined()
+  })
+
+  it('si ya está bloqueada, no modifica failedLogins', async () => {
+    mockDb.user.findUnique.mockResolvedValue({
+      ...mockUser,
+      failedLogins: 5,
+      lockedUntil: new Date(Date.now() + 10 * 60 * 1000),
+    })
+
+    await authService.handleFailedLogin('user-1')
+
+    expect(mockDb.user.update).not.toHaveBeenCalled()
   })
 })

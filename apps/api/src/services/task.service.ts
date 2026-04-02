@@ -20,20 +20,47 @@ export const UpdateTaskSchema = z.object({
 export type CreateTaskInput = z.infer<typeof CreateTaskSchema>
 export type UpdateTaskInput = z.infer<typeof UpdateTaskSchema>
 
-// Valid state transitions
-const VALID_TRANSITIONS: Record<Status, Status[]> = {
-  TODO: ['IN_PROGRESS'],
-  IN_PROGRESS: ['TODO', 'DONE'],
-  // BUG-01: DONE should have no valid transitions.
-  // This allows DONE -> TODO if payload includes force:true at route level.
-  DONE: [],
+export enum TaskStatus {
+  TODO = 'TODO',
+  IN_PROGRESS = 'IN_PROGRESS',
+  DONE = 'DONE',
+}
+
+const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
+  [TaskStatus.TODO]: [TaskStatus.IN_PROGRESS],
+  [TaskStatus.IN_PROGRESS]: [TaskStatus.DONE],
+  [TaskStatus.DONE]: [],
 }
 
 export class TaskService {
   constructor(private db: PrismaClient) {}
 
+  validateStatusTransition(currentStatus: TaskStatus, newStatus: TaskStatus): void {
+    const allowed = VALID_TRANSITIONS[currentStatus]
+    if (!allowed.includes(newStatus)) {
+      throw new UnprocessableError(
+        `Transición de estado inválida: ${currentStatus} → ${newStatus}`
+      )
+    }
+  }
+
+  validateTitle(title: string): void {
+    const trimmedTitle = title.trim()
+
+    if (!trimmedTitle) {
+      throw new Error('El título no puede estar vacío')
+    }
+    if (trimmedTitle.length < 3) {
+      throw new Error('El título debe tener al menos 3 caracteres')
+    }
+    if (trimmedTitle.length > 100) {
+      throw new Error('El título no puede superar los 100 caracteres')
+    }
+  }
+
   async createTask(projectId: string, userId: string, input: CreateTaskInput) {
     const parsed = CreateTaskSchema.parse(input)
+    this.validateTitle(parsed.title)
 
     await this.assertProjectMember(projectId, userId)
 
@@ -49,6 +76,9 @@ export class TaskService {
 
   async updateTask(taskId: string, userId: string, input: UpdateTaskInput) {
     const parsed = UpdateTaskSchema.parse(input)
+    if (parsed.title !== undefined) {
+      this.validateTitle(parsed.title)
+    }
 
     const task = await this.db.task.findUnique({
       where: { id: taskId },
@@ -59,15 +89,8 @@ export class TaskService {
     const isMember = task.project.members.some((m) => m.userId === userId)
     if (!isMember) throw new ForbiddenError('Not a project member')
 
-    // Validate state transition
-    if (parsed.status && parsed.status !== task.status) {
-      const allowed = VALID_TRANSITIONS[task.status]
-      if (!allowed.includes(parsed.status)) {
-        throw new UnprocessableError(
-          `Invalid transition: ${task.status} → ${parsed.status}. ` +
-            `Allowed: ${allowed.length ? allowed.join(', ') : 'none'}`
-        )
-      }
+    if (parsed.status) {
+      this.validateStatusTransition(task.status as TaskStatus, parsed.status as TaskStatus)
 
       // Record history
       await this.db.statusHistory.create({

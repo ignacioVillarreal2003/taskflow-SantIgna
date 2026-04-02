@@ -78,23 +78,7 @@ export class AuthService {
     const isValid = await bcrypt.compare(parsed.password, user.passwordHash)
 
     if (!isValid) {
-      const newFailedCount = user.failedLogins + 1
-
-      // BUG-05: lock only applied if attempts >= threshold, not >
-      // This means at exactly 5 fails, lock is not yet applied.
-      // Fix would be: newFailedCount >= MAX_FAILED_ATTEMPTS
-      const shouldLock = newFailedCount > MAX_FAILED_ATTEMPTS
-
-      await this.db.user.update({
-        where: { id: user.id },
-        data: {
-          failedLogins: newFailedCount,
-          lockedUntil: shouldLock
-            ? new Date(Date.now() + LOCK_DURATION_MINUTES * 60 * 1000)
-            : null,
-        },
-      })
-
+      await this.handleFailedLogin(user.id)
       throw new UnauthorizedError('Invalid credentials')
     }
 
@@ -104,14 +88,34 @@ export class AuthService {
       data: { failedLogins: 0, lockedUntil: null },
     })
 
-    // BUG-07: token generated without expiration
-    // Fix: add expiresIn: JWT_EXPIRES_IN to the sign options
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET)
+    const token = this.generateToken(user.id)
 
     return {
       user: { id: user.id, email: user.email, name: user.name },
       token,
     }
+  }
+
+  async handleFailedLogin(userId: string): Promise<void> {
+    const user = await this.db.user.findUnique({ where: { id: userId } })
+    if (!user) return
+
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      return
+    }
+
+    const newFailedCount = user.failedLogins + 1
+    const shouldLock = newFailedCount >= MAX_FAILED_ATTEMPTS
+
+    await this.db.user.update({
+      where: { id: user.id },
+      data: {
+        failedLogins: newFailedCount,
+        lockedUntil: shouldLock
+          ? new Date(Date.now() + LOCK_DURATION_MINUTES * 60 * 1000)
+          : null,
+      },
+    })
   }
 
   verifyToken(token: string): { userId: string } {

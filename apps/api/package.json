@@ -7,11 +7,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "eslint src tests",
-    "typecheck": "tsc --noEmit",
     "test:unit": "vitest run tests/unit --coverage",
     "test:integration": "vitest run tests/integration",
     "test:bdd": "cucumber-js",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",
