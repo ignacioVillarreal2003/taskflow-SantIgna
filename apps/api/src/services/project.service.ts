@@ -66,7 +66,7 @@ export class ProjectService {
     })
     if (!project) throw new NotFoundError('Project not found')
 
-    const isMember = project.members.some((m) => m.userId === userId)
+    const isMember = project.members.some((m: { userId: string }) => m.userId === userId)
     if (!isMember) throw new ForbiddenError('Not a project member')
 
     return project

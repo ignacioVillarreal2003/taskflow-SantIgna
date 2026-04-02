@@ -1,10 +1,9 @@
 import { Router } from 'express'
 import { PrismaClient } from '@prisma/client'
 import { ProjectService } from '../services/project.service'
-import { TaskService } from '../services/task.service'
+import { TaskPriority, TaskService, TaskStatus } from '../services/task.service'
 import { CommentService } from '../services/comment.service'
 import { requireAuth, AuthRequest } from '../middleware/auth.middleware'
-import { Status, Priority } from '@prisma/client'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -46,8 +45,8 @@ router.get('/:projectId/tasks', requireAuth, async (req: AuthRequest, res, next)
   try {
     const { status, priority, assignedTo, search } = req.query
     const tasks = await taskService.getTasks(req.params.projectId, req.userId!, {
-      status: status as Status | undefined,
-      priority: priority as Priority | undefined,
+      status: status as TaskStatus | undefined,
+      priority: priority as TaskPriority | undefined,
       assignedTo: assignedTo as string | undefined,
       search: search as string | undefined,
     })

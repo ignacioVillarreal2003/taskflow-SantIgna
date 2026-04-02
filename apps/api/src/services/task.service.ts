@@ -1,30 +1,37 @@
-import { PrismaClient, Status, Priority } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
 import { ForbiddenError, NotFoundError, UnprocessableError } from './auth.service'
-
-export const CreateTaskSchema = z.object({
-  title: z.string().min(3).max(200),
-  description: z.string().optional(),
-  priority: z.nativeEnum(Priority).default('MEDIUM'),
-  assignedTo: z.string().cuid().optional(),
-})
-
-export const UpdateTaskSchema = z.object({
-  title: z.string().min(3).max(200).optional(),
-  description: z.string().optional(),
-  status: z.nativeEnum(Status).optional(),
-  priority: z.nativeEnum(Priority).optional(),
-  assignedTo: z.string().cuid().nullable().optional(),
-})
-
-export type CreateTaskInput = z.infer<typeof CreateTaskSchema>
-export type UpdateTaskInput = z.infer<typeof UpdateTaskSchema>
 
 export enum TaskStatus {
   TODO = 'TODO',
   IN_PROGRESS = 'IN_PROGRESS',
   DONE = 'DONE',
 }
+
+export enum TaskPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL',
+}
+
+export const CreateTaskSchema = z.object({
+  title: z.string().min(3).max(200),
+  description: z.string().optional(),
+  priority: z.nativeEnum(TaskPriority).default(TaskPriority.MEDIUM),
+  assignedTo: z.string().cuid().optional(),
+})
+
+export const UpdateTaskSchema = z.object({
+  title: z.string().min(3).max(200).optional(),
+  description: z.string().optional(),
+  status: z.nativeEnum(TaskStatus).optional(),
+  priority: z.nativeEnum(TaskPriority).optional(),
+  assignedTo: z.string().cuid().nullable().optional(),
+})
+
+export type CreateTaskInput = z.infer<typeof CreateTaskSchema>
+export type UpdateTaskInput = z.infer<typeof UpdateTaskSchema>
 
 const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   [TaskStatus.TODO]: [TaskStatus.IN_PROGRESS],
@@ -68,7 +75,7 @@ export class TaskService {
       data: {
         ...parsed,
         projectId,
-        status: 'TODO',
+        status: TaskStatus.TODO,
       },
       include: { assignee: { select: { id: true, email: true, name: true } } },
     })
@@ -86,7 +93,7 @@ export class TaskService {
     })
     if (!task) throw new NotFoundError('Task not found')
 
-    const isMember = task.project.members.some((m) => m.userId === userId)
+    const isMember = task.project.members.some((m: { userId: string }) => m.userId === userId)
     if (!isMember) throw new ForbiddenError('Not a project member')
 
     if (parsed.status) {
@@ -117,8 +124,8 @@ export class TaskService {
     projectId: string,
     userId: string,
     filters: {
-      status?: Status
-      priority?: Priority
+      status?: TaskStatus
+      priority?: TaskPriority
       assignedTo?: string
       search?: string
     }
