@@ -8,6 +8,7 @@ App de gestión de tareas (tipo Jira simplificado) con suite completa de tests.
 ## Integrantes
 
 - Ignacio Villarreal
+
 - Santiago Aurecoechea
 
 ---
